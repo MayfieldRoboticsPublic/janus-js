@@ -5,6 +5,8 @@ node_js:
 
 before_script:
 - npm install -g karma-cli grunt-cli bower
+- npm install
+- bower install
 
 script:
 - grunt clean build test
