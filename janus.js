@@ -395,6 +395,7 @@ Janus.Plugin = Backbone.Model.extend({
             if (this.get("id") in session.plugins) {
                 delete session.plugins[this.get("id")];
             }
+            this.trigger("janus:detach");
             session.trigger("janus:detach", this);
             this.session = null;
         }
@@ -856,6 +857,11 @@ Janus.Session = Backbone.Model.extend({
             success: _.noop,
             error: _.noop
         });
+        
+        if (this.isConnected()) {
+            _.defer(options.success);
+            return;
+        }
         
         options.success = _.wrap(options.success, function(func, data) {
             console.log("create session", data);
