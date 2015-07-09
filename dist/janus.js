@@ -219,7 +219,8 @@ Janus.Connection.prototype._wsSetup = function (options) {
     
     ws.onclose = function (event) {
         that.connected = false;
-        that.session.disconnected();
+        if (that.session.cxn === that)
+            that.session.disconnected();
         if (that._ws) {
             that._ws.close();
             that._ws = null;
@@ -241,7 +242,7 @@ Janus.Connection.prototype._wsSetup = function (options) {
             success: function (json) {
                 options.success(json);
             }
-        }); 
+        });
     };
     
     this._ws = ws;
