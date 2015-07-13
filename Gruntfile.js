@@ -4,6 +4,7 @@ module.exports = function (grunt) {
   grunt.loadNpmTasks('grunt-contrib-copy');
   grunt.loadNpmTasks('grunt-contrib-jshint');
   grunt.loadNpmTasks('grunt-contrib-uglify');
+  grunt.loadNpmTasks('grunt-contrib-watch');
   grunt.loadNpmTasks('grunt-coveralls');
   grunt.loadNpmTasks('grunt-karma');
 
@@ -57,6 +58,16 @@ module.exports = function (grunt) {
         }
       }
     },
+    
+    watch: {
+      grunt: {
+        files: 'Gruntfile.js'
+      },
+      src: {
+        files: ['bower_components/**', 'janus.js'],
+        tasks: ['build']
+      }
+    }
 
   });
 

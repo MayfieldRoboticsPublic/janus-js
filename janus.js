@@ -1,30 +1,28 @@
-// Janus
-// -----
+/**
+ * Library used to communicate w/ Janus gateway using a `Janus.Session` and
+ * `Janus.Plugin`.
+ */
 
-// Library used to communicate w/ Janus gateway using a `Janus.Session` and
-// `Janus.Plugin`.
-//
 var Janus = Janus || {};
 
-//Janus.Connection
-//----------------
-
-// Represents a connection (either http:// or ws://) to the Janus gateway
-// through which all non-WebRTC communication (e.g. signaling) is done by
-// `Janus.Session`. Use it like e.g.:
-// 
-//  var cxn = new Janus.Connection({
-//      server: "http://",
-//      success: function () {
-//          console.log("connected!");
-//      },
-//  });
-//  
-//  cxn.send({"message": "hi"}, {
-//      success: functon (data) {
-//          console.log("and janus said", data);
-//      }});
-// 
+/**
+ * Represents a connection (either http:// or ws://) to the Janus gateway
+ * through which all non-WebRTC communication (e.g. signaling) is done by
+ * `Janus.Session`. Use it like e.g.:
+ * 
+ *  var cxn = new Janus.Connection({
+ *      server: "http://",
+ *      success: function () {
+ *          console.log("connected!");
+ *      },
+ *  });
+ *  
+ *  cxn.send({"message": "hi"}, {
+ *      success: functon (data) {
+ *          console.log("and janus said", data);
+ *      }});
+ *
+ */
 Janus.Connection = function (options) {
     this.server = options.server;
     this.session = options.session;
@@ -62,18 +60,44 @@ Janus.Connection = function (options) {
 _.extend(Janus.Connection, Backbone.Events);
 
 Janus.Connection.prototype.send = function (req, options) {
+    var d = Q.defer();
+    
     _.defaults(req, {
         "transaction": this.session.generateTransactionId(),
         "apisecret": this.session.secret
     });
     
     options = options || {};
+    _.extend(options, {
+        success: function (data) {
+            d.resolve(data);
+        },
+        error: function (reason) {
+            d.reject(reason);
+        }
+    });
     
     this._send(req, options);
+    
+    return d.promise;
 };
 
 Janus.Connection.prototype.close = function (options) {
+    var d = Q.defer();
+    
+    options = options || {};
+    _.extend(options, {
+        success: function () {
+            d.resolve();
+        },
+        error: function (reason) {
+            d.reject(reason);
+        }
+    });
+    
     this._close(options);
+    
+    return d.promise;
 };
 
 Janus.Connection.prototype._httpSetup = function (options) {
@@ -164,7 +188,7 @@ Janus.Connection.prototype._httpPoll = function (retries) {
                         "Gateway rejected connnection " + retries + "x. Try reconnecting."
                     );
                 }
-                that.session.disconnected();
+                that.session.handleDisconnect();
             }
         },
     });
@@ -220,7 +244,7 @@ Janus.Connection.prototype._wsSetup = function (options) {
     ws.onclose = function (event) {
         that.connected = false;
         if (that.session.cxn === that)
-            that.session.disconnected();
+            that.session.handleDisconnect();
         if (that._ws) {
             that._ws.close();
             that._ws = null;
@@ -238,10 +262,8 @@ Janus.Connection.prototype._wsSetup = function (options) {
     ws.onopen = function (event) {
         that.connected = true;
         that._wsKeepAlive();
-        that.send({ "janus": "create" }, {
-            success: function (json) {
-                options.success(json);
-            }
+        that.send({ "janus": "create" }).then(function (data) {
+            options.success(data);
         });
     };
     
@@ -282,22 +304,21 @@ Janus.Connection.prototype._wsClose = function (options) {
     _.defer(options.success);
 };
 
-// Janus.Plugin 
-// ------------
-
-// A `Backbone.Model` used to represent a Janus plugin to be `attach`-ed to a
-// `connect`-ed `Janus.Session`. Use it like e.g.:
-//
-//    MyPlugin = Janus.Plugin.extend({
-//        ...
-//    });
-//    
-//    var myPlugin = new MyPlugin();
-//    
-//    myPlugin.listenTo(janusSession, "janus:connect", function () {
-//        janusPlugin.attach(janusSession);
-//    });
-//
+/**
+ * A `Backbone.Model` used to represent a Janus plugin to be `attach`-ed to a
+ * `connect`-ed `Janus.Session`. Use it like e.g.:
+ *
+ *    MyPlugin = Janus.Plugin.extend({
+ *        ...
+ *    });
+ *    
+ *    var myPlugin = new MyPlugin();
+ *    
+ *    myPlugin.listenTo(janusSession, "janus:connect", function () {
+ *        janusPlugin.attach(janusSession);
+ *    });
+ *
+ */
 Janus.Plugin = Backbone.Model.extend({
     
     defaults: {
@@ -326,70 +347,51 @@ Janus.Plugin = Backbone.Model.extend({
         return this.session !== undefined && this.session !== null && this.get("id") !== null;
     },
     
-    attach: function (session, options) {
+    attach: function (session) {
         var that = this,
             req = {
                 "janus": "attach",
                 "plugin": this.get("name")
             };
         
-        options = options || {};
-        _.defaults(options, {
-            sync: false,
-            success: _.noop,
-            error: _.noop
-        });
-        
-        options.success = _.wrap(options.success, function (func, data) {
-            that.session = session;
-            that.set("id", data.id);
-            console.info("attached plugin '" + that.get("id") + "' to session '" + that.session.get("id") + "'");
-            that.session.plugins[that.get("id")] = that;
-            func(data);
-            that.trigger("janus:attach");
-            that.session.trigger("janus:attach", that);
-        });
-        
-        options.error = _.wrap(options.error, function (func, reason) {
-            that.session = null;
-            func(reason);
-            that.session.trigger("janus:error", "attach", reason);
-        });
-        
-        return session.cxn.send(req, options);
+        return session.cxn.send(req).then(
+            function (data) {
+                that.session = session;
+                that.set("id", data.id);
+                console.info("attached plugin '" + that.get("id") + "' to session '" + that.session.get("id") + "'");
+                that.session.plugins[that.get("id")] = that;
+                that.trigger("janus:attach");
+                that.session.trigger("janus:attach", that);
+                return Q.fcall(function () { return data; });
+            },
+            function (reason) {
+                that.session = null;
+                that.session.trigger("janus:error", "attach", reason);
+            }
+        );
     },
     
-    detach: function (options) {
+    detach: function () {
         var that = this,
             request = {
                 plugin: this,
                 "janus": "detach"
             };
         
-        options = options || {};
-        _.defaults(options, {
-            sync: false,
-            success: _.noop,
-            error: _.noop
-        });
-        
-        options.success = _.wrap(options.success, function (data) {
-            console.info("detach: ", data);
-            that.detached();
-            options.success();
-        });
-        
-        options.error = _.wrap(options.error, function (reason) {
-            console.error(reason);
-            if (that.get("id") in that.session.plugins) {
-                delete that.session.plugins[that.get("id")];
+        return session.cxn.send(req).then(
+            function (data) {
+                console.info("janus-detach: ", data);
+                that.detached();
+                return Q.fcall(function () { return data; });
+            },
+            function (reason) {
+                console.error("janus-detach failed:", reason);
+                that.detached();
             }
-            that.detached();
-            options.error();
-        });
+        );
     },
     
-    detached: function () {
+    handleDetach: function () {
         var session = this.session;
         
         if (session !== undefined && session !== null) {
@@ -404,16 +406,23 @@ Janus.Plugin = Backbone.Model.extend({
         this.hangupPeerConnection();
     },
     
-    getUserMedia: function (options) {
-        options = options || {};
-        _.defaults(options, {
-            success: _.noop,
-            error: _.noop
-        });
+    getUserMedia: function () {
+        var that = this,
+            d = Q.defer();
         
-        var that = this;
+        function success(stream) {
+            console.info("webrtc: getUserMedia", stream);
+            that.set("localStream", stream);
+            that.trigger("webrtc:localstream", stream);
+            d.resolve(stream);
+        }
         
-        return MediaStreamTrack.getSources(function (sources) {
+        function error(reason) {
+            console.error("webrtc: getUserMedia failed", error);
+            d.reject(reason);
+        }
+        
+        MediaStreamTrack.getSources(function (sources) {
             var audioExist = sources.some(function (source) { return source.kind === "audio"; }),
                 videoExist = sources.some(function (source) { return source.kind === "video"; }),
                 userMediaConstraints = {
@@ -421,40 +430,28 @@ Janus.Plugin = Backbone.Model.extend({
                     video: videoExist && that.isVideoSendEnabled()
                 };
             
-            getUserMedia(
-                userMediaConstraints,
-                function (stream) {
-                    console.info("webrtc: getUserMedia", stream);
-                    that.set("localStream", stream);
-                    that.trigger("webrtc:localstream", stream);
-                    options.success(stream);
-                },
-                function (error) {
-                    console.error("webrtc: getUserMedia failed", error);
-                    options.error(error);
-                }
-            );
+            getUserMedia(userMediaConstraints, success, error);
         });
+        
+        return d.promise;
     },
     
     createPeerConnection: function (options) {
         options = options || {};
-        _.defaults(options, {
-            success: _.noop,
-            error: _.noop
-        });
         
-        var that = this;
+        var that = this,
+            d = Q.defer();
         
         if (!this.get("localStream") && (this.isAudioSendEnabled() || this.isVideoSendEnabled())) {
-            
-            return this.getUserMedia({
-                success: function () {
-                    that.createPeerConnection(options);
-                },
-                error: options.error
-            });
-            
+            return this.getUserMedia()
+                .then(
+                    function (stream) { return that.createPeerConnection(options); },
+                    function (reason) { d.reject(reason); }
+                )
+                .then(
+                    function (pc) { d.resolve(pc); },
+                    function (reason) { d.reject(reason); }
+                );
         }
         
         var pc = new RTCPeerConnection({
@@ -520,7 +517,9 @@ Janus.Plugin = Backbone.Model.extend({
             }
         };
         
-        _.defer(options.success);
+        _.defer(function () { d.resolve(pc); });
+        
+        return d.promise;
     },
     
     hangupPeerConnection: function () {
@@ -552,57 +551,61 @@ Janus.Plugin = Backbone.Model.extend({
     
     sendMessage: function (message, options) {
         var that = this,
-            req= {
+            d = Q.defer(),
+            req = {
                 "janus": "message",
                 "body": message,
             };
         
         options = options || {};
-        _.defaults(options, {
-            plugin: this,
-            success: _.noop,
-            error: _.noop
-        });
-        
-        options.success = _.wrap(options.success, function (func, data) {
-            if (req.jsep)
-                that.set("sdpSent", true);
-            func(data);
-        });
-        
-        options.error = _.wrap(options.error, function (func, reason) {
-            func(reason);
-        });
+        _.defaults(options, { plugin: this });
         
         if (options.jsep !== null && options.jsep !== undefined)
             req.jsep = options.jsep;
         else if (this.get("sdp") && !this.get("sdpSent"))
             req.jsep = this.get("sdp");
         
-        return this.session.cxn.send(req, options);
+        this.session.cxn.send(req, options).then(
+            function (data) {
+                if (req.jsep)
+                    that.set("sdpSent", true);
+                d.resolve(data);
+            },
+            function (reason) {
+                d.reject(reason);
+            }
+        );
+        
+        return d.promise;
     },
     
     sendIceCandidate: function (candidate, options) {
         var that = this,
+            d = Q.defer(),
             req = {
                 "janus": "trickle",
                 "candidate": candidate !== null ? candidate : {"completed": true}
             };
         
-        options = options || {};
-        _.defaults(options, {
-            plugin: this,
-            success: _.noop,
-            error: _.noop
-        });
+        function success(data) {
+            d.resolve();
+        }
         
-        return this.session.cxn.send(req, options);
+        function error(reason) {
+            d.reject(reason);
+        }
+        
+        options = options || {};
+        _.defaults(options, { plugin: this });
+        
+        this.session.cxn.send(req, options);
+        
+        return d.promise;
     },
     
-    createOffer: function (options) {
-        options = options || {};
-        
+    createOffer: function () {
         var that = this,
+            d = Q.defer(),
             mediaConstraints = {
                 "mandatory": {
                     "OfferToSendAudio": this.isAudioSendEnabled(),
@@ -611,52 +614,65 @@ Janus.Plugin = Backbone.Model.extend({
                     "OfferToReceiveVideo": this.isVideoRecvEnabled()
                 }
             };
+        
+        function success(offer) {
+            console.log("webrtc: created offer", offer);
+            if (that.get("sdp") === null || that.get("sdp") === undefined) {
+                console.log("webrtc: set local description", offer);
+                that.set("sdp", {
+                    type: "offer",
+                    sdp: offer.sdp
+                });
+                that.get("pc").setLocalDescription(offer);
+            }
+            that.trigger("webrtc:offer", offer);
+            d.resolve(offer);
+        }
+        
+        function error(reason) {
+            console.log("webrtc: failed to create offer", reason);
+            d.reject(reason);
+        }
+        
         console.log("webrtc: create offer", mediaConstraints);
-        this.get("pc").createOffer(
-            function (offer) {
-                console.log("webrtc: created offer", offer);
-                if (that.get("sdp") === null || that.get("sdp") === undefined) {
-                    console.log("webrtc: set local description", offer);
-                    that.set("sdp", {
-                        type: "offer",
-                        sdp: offer.sdp
-                    });
-                    that.get("pc").setLocalDescription(offer);
-                }
-                that.trigger("webrtc:offer", offer);
-                (options.success || _.noop)(offer);
-            },
-            options.error || _.noop,
-            mediaConstraints
-        );
+        this.get("pc").createOffer(success, error, mediaConstraints);
+        
+        return d.promise;
     },
     
-    createAnswer: function (options) {
+    createAnswer: function () {
         var that = this,
+            d = Q.defer();
             mediaConstraints = {
             "mandatory": {
                 "OfferToReceiveAudio": this.isAudioRecvEnabled(),
                 "OfferToReceiveVideo": this.isVideoRecvEnabled()
             }
         };
+        
+        function success(answer) {
+            console.log("webrtc: created answer", answer);
+            if (that.get("sdp") === null || that.get("sdp") === undefined) {
+                console.log("webrtc: set local description to", answer);
+                that.set("sdp", {
+                    "type": "answer",
+                    "sdp": answer.sdp
+                });
+                that.get("pc").setLocalDescription(answer);
+            }
+            that.trigger("webrtc:answer", answer);
+            d.resolve(answer);
+        }
+        
+        function error(reason) {
+            console.log("webrtc: failed to create answer", reason);
+            d.reject(reason);
+        }
+        
         console.log("webrtc: create answer", mediaConstraints);
-        this.get("pc").createAnswer(
-            function (answer) {
-                console.log("webrtc: created answer", answer);
-                if (that.get("sdp") === null || that.get("sdp") === undefined) {
-                    console.log("webrtc: set local description to", answer);
-                    that.set("sdp", {
-                        "type": "answer",
-                        "sdp": answer.sdp
-                    });
-                    that.get("pc").setLocalDescription(answer);
-                }
-                that.trigger("webrtc:answer", answer);
-                (options.success || _.noop)(answer);
-            },
-            options.error || _.noop,
-            mediaConstraints
-        );
+        this.get("pc").createAnswer(success, error, mediaConstraints);
+        
+        return d.promise;
     },
     
     handleEvent: function (data, jsep) {
@@ -664,10 +680,8 @@ Janus.Plugin = Backbone.Model.extend({
         
         if (jsep) {
             if (!this.get("pc")) {
-                this.createPeerConnection({
-                    success: function () {
-                        that.setRemoteDescription(jsep);
-                    }
+                this.createPeerConnection().then(function (pc) {
+                    that.setRemoteDescription(jsep);
                 });
             } else {
                 this.setRemoteDescription(jsep);
@@ -676,26 +690,31 @@ Janus.Plugin = Backbone.Model.extend({
         this.trigger("janus:event", data, jsep);
     },
     
-    setRemoteDescription: function (description, options) {
-        var that = this;
+    setRemoteDescription: function (description) {
+        var that = this,
+            d = Q.defer();
+        
         if (!(description instanceof RTCSessionDescription)) {
             description = new RTCSessionDescription(description);
         }
-        options = options || {};
+        
+        function success() {
+            console.log("webrtc: accepted remote description", description);
+            if (description.type == "offer") {
+                that.createAnswer();
+            }
+            d.resolve(description);
+        }
+        
+        function error(reason) {
+            console.log("webrtc: rejected remote description", reason);
+            d.reject(reason);
+        }
+        
         console.log("webrtc: setting remote description", description);
-        this.get("pc").setRemoteDescription(
-            description,
-            function () {
-                console.log("webrtc: accepted remote description", description);
-                if (description.type == "offer") {
-                    that.createAnswer(options);
-                    return;
-                }
-                (options.success || _.noop)();
-                return;
-            },
-            options.error || _.noop
-        );
+        this.get("pc").setRemoteDescription(description, success, error);
+        
+        return d.promise;
     },
     
     isAudioSendEnabled: function (media) {
@@ -755,70 +774,67 @@ Janus.Plugin = Backbone.Model.extend({
     },
     
     attached: function () {
-        var that = this, d = $.Deferred();
+        var that = this,
+            d = Q.defer();
         
         function callback() {
             that.off(null, callback);
             d.resolve();
         }
-        
-        function attached() {
+
+        _.defer(function () {
             if (that.isAttached()) {
-                d.resolve();
+                callback();
                 return;
             }
             that.once("janus:attach", callback);
-        }
-
-        _.defer(attached);
+        });
         
-        return d;
+        return d.promise;
     },
     
     negotiated: function () {
-        var that = this, d = $.Deferred();
+        var that = this,
+            d = Q.defer();
         
         function callback() {
             that.off(null, callback);
             d.resolve();
         }
-        
-        function negotiated() {
+
+        _.defer(function () {
             if (that.get("sdp")) {
                 callback();
                 return;
             }
             that.once("webrtc:offer", callback);
             that.once("webrtc:answer", callback);
-        }
-
-        _.defer(negotiated);
+        });
         
-        return d;
+        return d.promise;
     }
 });
 
-// Janus.Session 
-// -------------
-
-// A `Backbone.Model` used to represent a Janus gateway connection. All non-WebRTC
-// communication (i.e. http:// or ws:// events) with the gateway is coordinated by
-// `Janus.Session ` and WebRTC is done by `Janus.Plugin`s. Use it like e.g.:
-//
-//    var janusSession = new Janus.Session({}, {
-//        urlRoot: "http://127.0.0.1:8088/janus",
-//        iceServers: [{
-//            url: navigator.mozGetUserMedia ? "stun:stun.services.mozilla.com" :
-//                 navigator.webkitGetUserMedia ? "stun:stun.l.google.com:19302" :
-//                 "stun:23.21.150.121"
-//        }],
-//        pcConstraints: {
-//            "optional": [{"DtlsSrtpKeyAgreement": true}]
-//        }
-//    });
-//
-//    janusSession.connect();
-//
+/**
+ * A `Backbone.Model` used to represent a Janus gateway connection. All non-WebRTC
+ * communication (i.e. http:// or ws:// events) with the gateway is coordinated by
+ * `Janus.Session ` and WebRTC is done by `Janus.Plugin`s. Use it like e.g.:
+ *
+ *    var janusSession = new Janus.Session({}, {
+ *        urlRoot: "http://127.0.0.1:8088/janus",
+ *        iceServers: [{
+ *            url: navigator.mozGetUserMedia ? "stun:stun.services.mozilla.com" :
+ *                 navigator.webkitGetUserMedia ? "stun:stun.l.google.com:19302" :
+ *                 "stun:23.21.150.121"
+ *        }],
+ *        pcConstraints: {
+ *            "optional": [{"DtlsSrtpKeyAgreement": true}]
+ *        }
+ *    });
+ *
+ *    janusSession.connect();
+ *
+ */
 Janus.Session = Backbone.Model.extend({
     
     defaults: {
@@ -849,38 +865,40 @@ Janus.Session = Backbone.Model.extend({
     
     connect: function (options) {
         var that = this,
-            cxn = null;
+            cxn = null,
+            d = Q.defer();
         
-        options = options || {};
-        _.extend(options, this.cxnConfig);
-        _.defaults(options, {
-            session: this,
-            success: _.noop,
-            error: _.noop
-        });
-        
-        if (this.isConnected()) {
-            _.defer(options.success);
-            return;
-        }
-        
-        options.success = _.wrap(options.success, function(func, data) {
+        function success(data) {
             console.log("create session", data);
             that.cxn = cxn;
             that.set("id", data.id);
             console.log("created session w/ id " + that.get("id"));
             that.trigger("janus:connect");
-            func(data);
-        });
+            d.resolve(cxn);
+        }
         
-        options.error = _.wrap(options.error, function (func, reason) {
+        function error() {
             console.error("create session", reason);
             that.cxn = null;
             that.trigger("janus:error", "connect", reason);
-            func(reason);
+            d.reject(reason);
+        }
+        
+        options = options || {};
+        _.extend(options, this.cxnConfig);
+        _.extend(options, {
+            session: this,
+            success: success,
+            error: error
         });
         
-        cxn = new Janus.Connection(options);
+        if (this.isConnected()) {
+            _.defer(function () { d.resolve(); });
+        } else {
+            cxn = new Janus.Connection(options);
+        }
+        
+        return d.promise;
     },
     
     isConnected: function () {
@@ -888,63 +906,61 @@ Janus.Session = Backbone.Model.extend({
     },
     
     disconnect: function (options) {
-        var that = this;
-        
-        options = options || {};
-        _.defaults(options, {
-            success: _.noop,
-            error: _.noop
-        });
-        
-        options.success = _.wrap(options.success, function(func, data) {
-            that.disconnected();
-            func(data);
-        });
-        
-        options.error = _.wrap(options.error, function (func, reason) {
-            that.disconnected();
-            func(reason);
-        });
+        var p, that = this;
         
         if (!this.isConnected()) {
-            return _.defer(options.success);
+            var d = Q.defer();
+            _.defer(function () {
+                d.resolve();
+            });
+            p = d.promise;
+        } else {
+            p = this.cxn.close();
         }
         
-        return this.cxn.close(options);
+        p.then(
+            function () {
+                that.handleDisconnect();
+            },
+            function () {
+                that.handleDisconnect();
+            }
+        );
+        
+        return p;
     },
     
     reconnect: function (options) {
         var that = this;
         
-        options = options || {};
-        _.extend(options, this.cxnConfig);
+        options = _.extend(options || {}, this.cxnConfig);
         
-        return this.disconnect({
-            success: function () {
-                that.connect(options);
+        return this.disconnect().then(
+            function () {
+                return that.connect(options);
             },
-            error: function () {
-                that.connect(options);
-            },
-        });
+            function () {
+                return that.connect(options);
+            }
+        );
     },
-        
-    disconnected: function () {
+    
+    generateTransactionId: function () {
+        return _.sample("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 12).join("");
+    },
+    
+    handleDisconnect: function () {
         var id = this.get("id");
         
         this.cxn = null;
         this.set("id", null);
         _.each(_.values(this.plugins), function (plugin) {
-            plugin.detached();
+            plugin.handleDetach();
         });
         this.plugins = {};
         this.transactions = {};
         
         this.trigger("janus:disconnect", id);
-    },
-    
-    generateTransactionId: function () {
-        return _.sample("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 12).join("");
     },
     
     handleEvent: function (json) {
