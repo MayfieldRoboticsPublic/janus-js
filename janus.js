@@ -10,17 +10,17 @@ var Janus = Janus || {};
  * through which all non-WebRTC communication (e.g. signaling) is done by
  * `Janus.Session`. Use it like e.g.:
  * 
- *  var cxn = new Janus.Connection({
- *      server: "http://",
- *      success: function () {
- *          console.log("connected!");
- *      },
- *  });
- *  
- *  cxn.send({"message": "hi"}, {
- *      success: functon (data) {
- *          console.log("and janus said", data);
- *      }});
+ *   var cxn = new Janus.Connection({
+ *       server: "http://",
+ *       success: function () {
+ *           console.log("connected!");
+ *       },
+ *   });
+ *   
+ *   cxn.send({"message": "hi"}, {
+ *       success: functon (data) {
+ *           console.log("and janus said", data);
+ *       }});
  *
  */
 Janus.Connection = function (options) {

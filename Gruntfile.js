@@ -71,7 +71,7 @@ module.exports = function (grunt) {
 
   });
 
-  grunt.registerTask('build', ['uglify:dist', 'copy:dist', 'jshint:dist']);
+  grunt.registerTask('build', ['copy:dist', 'uglify:dist', 'jshint:dist']);
   grunt.registerTask('test', ['jshint:src', 'karma']);
   grunt.registerTask('default', ['test', 'build']);
 };
