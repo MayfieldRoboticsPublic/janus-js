@@ -15,9 +15,9 @@
   "main": "dist/janus.min.js",
   "ignore": [],
   "dependencies": {
-    "backbone": "~1.2.1",
-    "underscore": "~1.8.3",
-    "jquery": "~2.1.4",
+    "backbone": "~1",
+    "underscore": "~1",
+    "jquery": "~2",
     "q": "~1.0"
   }
 }
