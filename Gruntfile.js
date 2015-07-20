@@ -4,6 +4,7 @@ module.exports = function (grunt) {
   grunt.loadNpmTasks('grunt-contrib-copy');
   grunt.loadNpmTasks('grunt-contrib-jshint');
   grunt.loadNpmTasks('grunt-contrib-uglify');
+  grunt.loadNpmTasks('grunt-contrib-watch');
   grunt.loadNpmTasks('grunt-coveralls');
   grunt.loadNpmTasks('grunt-karma');
 
@@ -57,10 +58,20 @@ module.exports = function (grunt) {
         }
       }
     },
+    
+    watch: {
+      grunt: {
+        files: 'Gruntfile.js'
+      },
+      src: {
+        files: ['bower_components/**', 'janus.js'],
+        tasks: ['build']
+      }
+    }
 
   });
 
-  grunt.registerTask('build', ['uglify:dist', 'copy:dist', 'jshint:dist']);
+  grunt.registerTask('build', ['copy:dist', 'uglify:dist', 'jshint:dist']);
   grunt.registerTask('test', ['jshint:src', 'karma']);
   grunt.registerTask('default', ['test', 'build']);
 };
