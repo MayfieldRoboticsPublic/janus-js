@@ -45,7 +45,7 @@ Janus.Connection = function (options) {
         this._send = _.bind(this._httpSend, this);
         this._close = _.bind(this._httpClose, this);
         this._httpSetup(options);
-    } else if (this.server.lastIndexOf("ws://", 0) === 0) {
+    } else if (this.server.lastIndexOf("ws://", 0) === 0 || this.server.lastIndexOf("wss://", 0) === 0) {
         this.options = _.defaults(_.pick(options), {
             keepAliveFrequency: 30000,
         });
@@ -372,6 +372,17 @@ Janus.Plugin = Backbone.Model.extend({
     },
     
     detach: function () {
+        if (!this.isAttached()) {
+            var d = Q.defer();
+            
+            _.defer(function () {
+                that.handleDetach();
+                d.resolve();
+            });
+            
+            return d.promise;
+        }
+        
         var that = this,
             request = {
                 plugin: this,
@@ -381,12 +392,12 @@ Janus.Plugin = Backbone.Model.extend({
         return session.cxn.send(req).then(
             function (data) {
                 console.info("janus-detach: ", data);
-                that.detached();
+                that.handleDetach();
                 return Q.fcall(function () { return data; });
             },
             function (reason) {
                 console.error("janus-detach failed:", reason);
-                that.detached();
+                that.handleDetach();
             }
         );
     },
@@ -644,11 +655,11 @@ Janus.Plugin = Backbone.Model.extend({
         var that = this,
             d = Q.defer();
             mediaConstraints = {
-            "mandatory": {
-                "OfferToReceiveAudio": this.isAudioRecvEnabled(),
-                "OfferToReceiveVideo": this.isVideoRecvEnabled()
-            }
-        };
+                "mandatory": {
+                    "OfferToReceiveAudio": this.isAudioRecvEnabled(),
+                    "OfferToReceiveVideo": this.isVideoRecvEnabled()
+                }
+            };
         
         function success(answer) {
             console.log("webrtc: created answer", answer);
@@ -977,7 +988,6 @@ Janus.Session = Backbone.Model.extend({
             plugin,
             pluginData,
             data,
-            transaction,
             error;
         
         function callback(transaction) {
