@@ -549,6 +549,7 @@ Janus.Plugin = Backbone.Model.extend({
         this.set("dataChannel", null);
         this.set("iceDone", false);
         this.set("localStream", null);
+        this.trigger("webrtc:hangup");
     },
     
     hasDataChannel: function () {
