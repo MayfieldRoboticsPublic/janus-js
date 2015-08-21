@@ -26,7 +26,7 @@ From `bower.json`:
 $ bower install janus --save
 ```
 
-or:
+or
 
 ```bash
 $ bower install janus=git@github.com:mayfieldrobotics/janus-js.git#master --save
@@ -128,7 +128,7 @@ then create a `Janus.Session`:
 
 ```js
 var janusSession = new Janus.Session({}, {
-    urlRoot: "ws://127.0.0.1:8118",
+    urlRoot: "ws://127.0.0.1:8188",
     secret: "janusrocks",
     iceServers: [{
         "url":"stun:stun.l.google.com:19302"

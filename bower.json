@@ -11,7 +11,7 @@
     "type": "git",
     "url": "git@github.com:mayfieldrobotics/janus-js.git"
   },
-  "licenses": [],
+  "licenses": ["MIT"],
   "main": "dist/janus.min.js",
   "ignore": [],
   "dependencies": {
