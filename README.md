@@ -1,4 +1,4 @@
-# janus-js [![Build Status](https://magnum.travis-ci.com/mayfieldrobotics/janus-js.svg?token=qHBoPmgQbWPVxfoYZkz1)](https://magnum.travis-ci.com/mayfieldrobotics/janus-js)
+# janus-js [![Build Status](https://travis-ci.org/mayfieldrobotics/janus-js.svg?branch=master)](https://travis-ci.org/mayfieldrobotics/janus-js)
 
 Javascript client for [janus](https://github.com/meetecho/janus-gateway).
 
@@ -41,9 +41,9 @@ MyRecordPlugin = Janus.Plugin.extend({
 
     initialize : function(attributes, options) {
         this.set("name", "janus.plugin.myrecord");
-        
+
         options = options || {};
-        
+
         var media = {
             data: true
         };
@@ -68,7 +68,7 @@ MyRecordPlugin = Janus.Plugin.extend({
                 type: "publisher",
                 name: stream,
             };
-        
+
         _.extend(body, _.pick(options,
                 "record",
                 "record_rotate_freq",
@@ -76,9 +76,9 @@ MyRecordPlugin = Janus.Plugin.extend({
                 "video",
                 "bitrate"
             ));
-        
+
         this.set("stream", stream);
-        
+
         return this.sendMessage(body);
     },
 
@@ -92,7 +92,7 @@ MyRecordPlugin = Janus.Plugin.extend({
         _.extend(body, _.pick(options, "paused"));
         return this.sendMessage(body);
     },
-    
+
     configure: function (options) {
         var body = {
                 request: "configure"
@@ -107,14 +107,14 @@ MyRecordPlugin = Janus.Plugin.extend({
         ));
         return this.sendMessage(body);
     },
-    
+
     sessions: function () {
         var body = {
             request : "list"
         };
         return this.sendMessage(body);
     },
-    
+
     leave: function () {
         var body = {
             request : "leave"
