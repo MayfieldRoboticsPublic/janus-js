@@ -384,12 +384,12 @@ Janus.Plugin = Backbone.Model.extend({
         }
 
         var that = this,
-            request = {
+            req = {
                 plugin: this,
                 "janus": "detach"
             };
 
-        return session.cxn.send(req).then(
+        return this.session.cxn.send(req).then(
             function (data) {
                 console.info("janus-detach: ", data);
                 that.handleDetach();
@@ -619,9 +619,9 @@ Janus.Plugin = Backbone.Model.extend({
         var that = this,
             d = Q.defer(),
             mediaConstraints = {
-                "mandatory": {
-                    "OfferToReceiveAudio": this.isAudioRecvEnabled(),
-                    "OfferToReceiveVideo": this.isVideoRecvEnabled()
+                mandatory: {
+                    OfferToReceiveAudio: this.isAudioRecvEnabled(),
+                    OfferToReceiveVideo: this.isVideoRecvEnabled()
                 }
             };
 
