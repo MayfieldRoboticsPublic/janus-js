@@ -1,7 +1,6 @@
 {
   "name": "janus",
   "description": "Javascript client for https://github.com/meetecho/janus-gateway.",
-  "version": "0.1.0",
   "homepage": "https://github.com/mayfieldrobotics/janus-js",
   "author": {
     "name": "Mayfield Robotics",
@@ -12,7 +11,7 @@
     "url": "git@github.com:mayfieldrobotics/janus-js.git"
   },
   "licenses": ["MIT"],
-  "main": "dist/janus.min.js",
+  "main": "dist/janus.js",
   "ignore": [],
   "dependencies": {
     "backbone": "~1",
